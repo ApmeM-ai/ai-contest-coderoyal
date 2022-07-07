@@ -1,0 +1,9 @@
+bin/
+packages/
+obj/
+.vs/
+*.orig
+*.log
+/bots
+*.user
+/runner/aicup2020-preferences.json
