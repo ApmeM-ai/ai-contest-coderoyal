@@ -1,0 +1,30 @@
+{
+  "seed": null,
+  "game": {
+    "Create": "Round1"
+  },
+  "players": [
+    {
+      "Tcp": {
+        "host": null,
+        "port": 31001,
+        "run": {
+          "run_command": [
+            "dotnet",
+            "run",
+            "--project",
+            "../src/client-csharp/AiCup22.csproj"
+          ]
+        },
+        "accept_timeout": null,
+        "single_timeout": null,
+        "token": null
+      }
+    },
+    "AutoBot",
+    "AutoBot",
+    "AutoBot",
+    "AutoBot",
+    "AutoBot"
+  ]
+}

@@ -6,4 +6,6 @@ obj/
 *.log
 /bots
 *.user
-/runner/aicup2020-preferences.json
+/runner/preferences.json
+.vscode
+
