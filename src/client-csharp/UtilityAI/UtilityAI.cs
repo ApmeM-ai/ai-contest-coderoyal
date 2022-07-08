@@ -8,7 +8,7 @@
         /// <summary>
         /// The context should contain all the data needed to run the tree
         /// </summary>
-        private readonly T context;
+        public T context;
 
         private readonly Reasoner<T> rootReasoner;
 
