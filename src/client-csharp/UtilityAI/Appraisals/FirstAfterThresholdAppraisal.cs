@@ -6,18 +6,15 @@
     using BrainAI.AI.UtilityAI.Considerations.Appraisals;
 
     /// <summary>
-    /// Only scores if all child Appraisals score above the threshold
+    /// Scores by summing child Appraisals until a child scores below the threshold
     /// </summary>
-    public class AllOrNothingConsideration<T> : IConsideration<T>
+    public class FirstAfterThresholdAppraisal<T> : IAppraisal<T>
     {
         public float Threshold;
 
-        public IAction<T> Action { get; set; }
-
         public readonly List<IAppraisal<T>> Appraisals = new List<IAppraisal<T>>();
 
-
-        public AllOrNothingConsideration( float threshold = 0 )
+        public FirstAfterThresholdAppraisal( float threshold )
         {
             this.Threshold = threshold;
         }
@@ -29,7 +26,7 @@
             {
                 var score = this.Appraisals[i].GetScore( context );
                 if( score < this.Threshold )
-                    return 0;
+                    return sum;
                 sum += score;
             }
 

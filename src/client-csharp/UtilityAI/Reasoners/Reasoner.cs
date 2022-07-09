@@ -3,41 +3,49 @@
     using System.Collections.Generic;
 
     using BrainAI.AI.UtilityAI.Actions;
-    using BrainAI.AI.UtilityAI.Considerations;
+    using BrainAI.AI.UtilityAI.Considerations.Appraisals;
 
     /// <summary>
     /// the root of UtilityAI.
     /// </summary>
-    public abstract class Reasoner<T>
+    public abstract partial class Reasoner<T>
     {
-        public IConsideration<T> DefaultConsideration = new FixedScoreConsideration<T>();
-
-        protected List<IConsideration<T>> Considerations = new List<IConsideration<T>>();
-
-
-        public IAction<T> Select( T context )
+        protected class Consideration
         {
-            var consideration = this.SelectBestConsideration( context );
-            return consideration?.Action;
+            public IAppraisal<T> Appraisal { get; set; }
+            public IAction<T> Action { get; set; }
         }
 
+        protected readonly List<Consideration> Considerations = new List<Consideration>();
 
-        protected abstract IConsideration<T> SelectBestConsideration( T context );
+        public abstract IAction<T> SelectBestAction(T context);
 
-
-        public Reasoner<T> AddConsideration( IConsideration<T> consideration )
+        public Reasoner<T> Add(IAppraisal<T> appraisal, params IAction<T>[] actions)
         {
-            this.Considerations.Add( consideration );
+            IAction<T> action;
+            if (actions.Length == 0)
+            {
+                action = new NoAction<T>();
+            }
+            else if (actions.Length == 1)
+            {
+                action = actions[0];
+            }
+            else
+            {
+                var newAction = new CompositeAction<T>();
+                newAction.Actions.AddRange(actions);
+                action = newAction;
+            }
+
+            this.Considerations.Add(new Consideration
+            {
+                Appraisal = appraisal,
+                Action = action
+            });
+
             return this;
         }
-
-
-        public Reasoner<T> SetDefaultConsideration( IConsideration<T> defaultConsideration )
-        {
-            this.DefaultConsideration = defaultConsideration;
-            return this;
-        }
-
     }
 }
 

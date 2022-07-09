@@ -3,20 +3,20 @@
     using BrainAI.AI.UtilityAI.Actions;
 
     /// <summary>
-    /// The Consideration with the highest score is selected
+    /// The Consideration with the lowest score is selected
     /// </summary>
-    public class HighestScoreReasoner<T> : Reasoner<T>
+    public class LowestScoreReasoner<T> : Reasoner<T>
     {
         public override IAction<T> SelectBestAction(T context)
         {
             Consideration consideration = null;
-            float highestScore = float.MinValue;
+            float lowestScore = float.MaxValue;
             for( var i = 0; i < this.Considerations.Count; i++ )
             {
                 var score = this.Considerations[i].Appraisal.GetScore( context );
-                if( score > highestScore )
+                if( score < lowestScore )
                 {
-                    highestScore = score;
+                    lowestScore = score;
                     consideration = this.Considerations[i];
                 }
             }
