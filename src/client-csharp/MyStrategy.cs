@@ -115,7 +115,8 @@ namespace AiCup22
                 new SetMoveTargetToRandomPoint(),
                 new MoveWithInfluenceMap(),
                 new SetLookAtMoveTarget(),
-                new TryPickBullet());
+                new TryPickBullet(),
+                new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new HaveShieldPotionBool(),
@@ -132,10 +133,11 @@ namespace AiCup22
                         new FixedScoreAppraisal<AIState>(200)
                     ),
                 new PrintAction("Нужна выпивка!"),
-                new SetMoveTargetToPotion(),
+                new SetMoveTargetToShield(),
                 new MoveWithInfluenceMap(),
                 new SetLookAtMoveTarget(),
-                new TryPickBullet());
+                new TryPickBullet(),
+                new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new EnemyVisibleBool(),
@@ -147,7 +149,8 @@ namespace AiCup22
                 new SetMoveTargetToEnemy(),
                 new MoveWithInfluenceMap(),
                 new SetLookAtMoveTarget(),
-                new TryPickBullet());
+                new TryPickBullet(),
+                new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new EnemyVisibleBool(),
@@ -167,8 +170,9 @@ namespace AiCup22
                 new PrintAction("Заблудился!"),
                 new SetMoveTargetToRandomPoint(),
                 new MoveWithInfluenceMap(),
-                new SetLookAtMoveTarget(),
-                new TryPickBullet());
+                new SetLookScan(),
+                new TryPickBullet(),
+                new TryPickShield());
 
             return reasoner;
         }
@@ -296,7 +300,7 @@ namespace AiCup22
 
             public void Execute(AIState context)
             {
-                if (context.unitState.RandomPoint.WithinZone(context.game))
+                if (!context.unitState.RandomPoint.WithinZone(context.game))
                 {
                     context.unitState.RandomPoint = context.currentUnit.Position;
                 }
@@ -330,7 +334,7 @@ namespace AiCup22
             }
         }
 
-        private class SetMoveTargetToPotion : IAction<AIState>
+        private class SetMoveTargetToShield : IAction<AIState>
         {
             public void Execute(AIState context)
             {
@@ -340,15 +344,7 @@ namespace AiCup22
                     .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
                     .First();
 
-                context.debug.AddCircle(closestPotion.Position, 1, new Debugging.Color(0, 1, 1, 1.5));
-
-                if (closestPotion.Position.Sub(context.currentUnit.Position).GetLengthQuad() < context.constants.UnitRadius * context.constants.UnitRadius)
-                {
-                    context.result = new UnitOrder(
-                        context.result?.TargetVelocity ?? new Vec2(0, 0),
-                        context.result?.TargetDirection ?? new Vec2(0, 0),
-                        new ActionOrder.Pickup(closestPotion.Id));
-                }
+                context.debug.AddCircle(closestPotion.Position, 1, new Debugging.Color(0, 1, 1, 0.5));
 
                 context.unitState.MoveToPoint = closestPotion.Position;
             }
@@ -360,6 +356,31 @@ namespace AiCup22
             {
                 var closestAmmo = context.game.Loot
                     .Where(a => a.Item is Ammo)
+                    .Where(a => a.Position.WithinZone(context.game))
+                    .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
+                    .Cast<Loot?>()
+                    .FirstOrDefault();
+
+                if (closestAmmo == null){
+                    return;
+                }
+
+                if (closestAmmo.Value.Position.Sub(context.currentUnit.Position).GetLengthQuad() < context.constants.UnitRadius * context.constants.UnitRadius)
+                {
+                    context.result = new UnitOrder(
+                        context.result?.TargetVelocity ?? new Vec2(0, 0),
+                        context.result?.TargetDirection ?? new Vec2(0, 0),
+                        new ActionOrder.Pickup(closestAmmo.Value.Id));
+                }
+            }
+        }
+        
+        private class TryPickShield : IAction<AIState>
+        {
+            public void Execute(AIState context)
+            {
+                var closestAmmo = context.game.Loot
+                    .Where(a => a.Item is ShieldPotions)
                     .Where(a => a.Position.WithinZone(context.game))
                     .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
                     .Cast<Loot?>()
@@ -457,6 +478,17 @@ namespace AiCup22
             }
         }
 
+        private class SetLookScan : IAction<AIState>
+        {
+            public void Execute(AIState context)
+            {
+                context.result = new UnitOrder(
+                    context.result?.TargetVelocity ?? new Vec2(0, 0),
+                    new Vec2(-context.currentUnit.Direction.Y, context.currentUnit.Direction.X),
+                    context.result?.Action);
+            }
+        }
+
         private class Aim : IAction<AIState>
         {
             public void Execute(AIState context)
@@ -484,7 +516,7 @@ namespace AiCup22
     {
         public static bool WithinZone(this Vec2 v, Game game)
         {
-            return v.Sub(game.Zone.CurrentCenter).GetLengthQuad() >
+            return v.Sub(game.Zone.CurrentCenter).GetLengthQuad() <
                     game.Zone.CurrentRadius * game.Zone.CurrentRadius;
         }
         public static double GetLengthQuad(this Vec2 v)
