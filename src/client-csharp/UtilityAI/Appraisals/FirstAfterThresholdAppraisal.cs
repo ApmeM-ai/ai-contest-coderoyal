@@ -1,9 +1,6 @@
-﻿namespace BrainAI.AI.UtilityAI.Considerations
+﻿namespace AiCup22.UtilityAI.Appraisals
 {
     using System.Collections.Generic;
-
-    using BrainAI.AI.UtilityAI.Actions;
-    using BrainAI.AI.UtilityAI.Considerations.Appraisals;
 
     /// <summary>
     /// Scores by summing child Appraisals until a child scores below the threshold
@@ -14,18 +11,18 @@
 
         public readonly List<IAppraisal<T>> Appraisals = new List<IAppraisal<T>>();
 
-        public FirstAfterThresholdAppraisal( float threshold )
+        public FirstAfterThresholdAppraisal(float threshold)
         {
-            this.Threshold = threshold;
+            Threshold = threshold;
         }
 
-        public float GetScore( T context )
+        public float GetScore(T context)
         {
             var sum = 0f;
-            for( var i = 0; i < this.Appraisals.Count; i++ )
+            for (var i = 0; i < Appraisals.Count; i++)
             {
-                var score = this.Appraisals[i].GetScore( context );
-                if( score < this.Threshold )
+                var score = Appraisals[i].GetScore(context);
+                if (score < Threshold)
                     return sum;
                 sum += score;
             }

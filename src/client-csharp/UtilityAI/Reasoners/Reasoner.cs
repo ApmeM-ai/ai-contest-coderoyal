@@ -1,9 +1,8 @@
 ﻿namespace BrainAI.AI.UtilityAI.Reasoners
 {
     using System.Collections.Generic;
-
+    using AiCup22.UtilityAI.Appraisals;
     using BrainAI.AI.UtilityAI.Actions;
-    using BrainAI.AI.UtilityAI.Considerations.Appraisals;
 
     /// <summary>
     /// the root of UtilityAI.
@@ -22,26 +21,10 @@
 
         public Reasoner<T> Add(IAppraisal<T> appraisal, params IAction<T>[] actions)
         {
-            IAction<T> action;
-            if (actions.Length == 0)
-            {
-                action = new NoAction<T>();
-            }
-            else if (actions.Length == 1)
-            {
-                action = actions[0];
-            }
-            else
-            {
-                var newAction = new CompositeAction<T>();
-                newAction.Actions.AddRange(actions);
-                action = newAction;
-            }
-
             this.Considerations.Add(new Consideration
             {
                 Appraisal = appraisal,
-                Action = action
+                Action = new CompositeAction<T>(actions)
             });
 
             return this;

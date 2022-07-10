@@ -1,10 +1,6 @@
-﻿namespace BrainAI.AI.UtilityAI.Considerations
+﻿namespace AiCup22.UtilityAI.Appraisals
 {
     using System.Collections.Generic;
-    using System.Linq;
-
-    using BrainAI.AI.UtilityAI.Actions;
-    using BrainAI.AI.UtilityAI.Considerations.Appraisals;
 
     /// <summary>
     /// Scores by summing the score of all child Appraisals
@@ -13,9 +9,24 @@
     {
         public readonly List<IAppraisal<T>> Appraisals = new List<IAppraisal<T>>();
 
-        public float GetScore( T context )
+        public SumOfChildrenAppraisal()
         {
-            return this.Appraisals.Sum(t => t.GetScore(context));
+
+        }
+
+        public SumOfChildrenAppraisal(params IAppraisal<T>[] apparisals)
+        {
+            Appraisals.AddRange(apparisals);
+        }
+
+        public float GetScore(T context)
+        {
+            var result = 0f;
+            for (var i = 0; i < Appraisals.Count; i++)
+            {
+                result += Appraisals[i].GetScore(context);
+            }
+            return result;
         }
     }
 }

@@ -1,8 +1,5 @@
-﻿namespace BrainAI.AI.UtilityAI.Considerations
+﻿namespace AiCup22.UtilityAI.Appraisals
 {
-    using BrainAI.AI.UtilityAI.Actions;
-    using BrainAI.AI.UtilityAI.Considerations.Appraisals;
-
     /// <summary>
     /// always returns a fixed score. Serves double duty as a default Consideration.
     /// </summary>
@@ -10,16 +7,14 @@
     {
         public float Score;
 
-        public IAction<T> Action { get; set; }
-
-        public FixedScoreAppraisal( float score = 1 )
+        public FixedScoreAppraisal(float score)
         {
-            this.Score = score;
+            Score = score;
         }
 
-        public float GetScore( T context )
+        public float GetScore(T context)
         {
-            return this.Score;
+            return Score;
         }
     }
 }
