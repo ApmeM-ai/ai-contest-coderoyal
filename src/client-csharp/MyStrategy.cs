@@ -344,7 +344,7 @@ namespace AiCup22
                     .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
                     .First();
 
-                context.debug.AddCircle(closestPotion.Position, 1, new Debugging.Color(0, 1, 1, 0.5));
+                context.debug?.AddCircle(closestPotion.Position, 1, new Debugging.Color(0, 1, 1, 0.5));
 
                 context.unitState.MoveToPoint = closestPotion.Position;
             }
@@ -416,7 +416,6 @@ namespace AiCup22
 
                 context.result = new UnitOrder(move, context.result?.TargetDirection ?? new Vec2(0, 0), context.result?.Action);
                 // var constants = context.constants;
-                // var debugInterface = context.debug;
                 // var myUnit = context.currentUnit;
                 // var communication = context.communicationState;
 
@@ -428,7 +427,7 @@ namespace AiCup22
                 //         var chargeLength = Math.Sqrt(charge.X * charge.X + charge.Y * charge.Y);
                 //         if (chargeLength > 1)
                 //         {
-                //             debugInterface.AddPolyLine(
+                //             context.debug?.AddPolyLine(
                 //             new Vec2[] {
                 //                 new Vec2(myUnit.Position.X + x, myUnit.Position.Y + y),
                 //                 new Vec2(myUnit.Position.X + x + charge.X / chargeLength, myUnit.Position.Y + y + charge.Y / chargeLength),
