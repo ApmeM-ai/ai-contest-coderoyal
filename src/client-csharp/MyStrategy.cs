@@ -4,13 +4,11 @@ using System.Diagnostics;
 using System.Linq;
 using AiCup22.Model;
 using AiCup22.UtilityAI.Appraisals;
-using BrainAI.AI.UtilityAI.Actions;
 using BrainAI.AI.UtilityAI.Reasoners;
 using BrainAI.InfluenceMap;
 using BrainAI.InfluenceMap.Fading;
 using BrainAI.InfluenceMap.VectorGenerator;
 using BrainAI.Pathfinding;
-using static AiCup22.Model.Item;
 
 namespace AiCup22
 {
@@ -36,6 +34,7 @@ namespace AiCup22
 
             var myUnits = game.Units.Where(a => a.PlayerId == game.MyId);
 
+            this.communication.map.ClearLayer("border");
             this.communication.map.AddCharge(
                 "border",
                 new CircleChargeOrigin(new Point((int)game.Zone.CurrentCenter.X, (int)game.Zone.CurrentCenter.Y), (int)game.Zone.CurrentRadius),
@@ -81,6 +80,7 @@ namespace AiCup22
                 };
 
                 AI.SelectBestAction(aiState).Execute(aiState);
+                new ShowInfluenceMap().Execute(aiState);
 
                 result.Add(myUnit.Id, aiState.result.Value);
             }
@@ -176,340 +176,7 @@ namespace AiCup22
 
             return reasoner;
         }
-
-        private class HealthPct : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                return (float)(context.currentUnit.Health / context.constants.UnitHealth);
-            }
-        }
-
-        private class ShieldPct : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                return (float)(context.currentUnit.Shield / context.constants.MaxShield);
-            }
-        }
-
-        private class EnemyVisibleBool : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                return context.game.Units
-                    .Where(a => a.PlayerId != context.game.MyId)
-                    .Any() ? 1 : 0;
-            }
-        }
-
-        private class CanHitEnemyBool : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                return context.game.Units
-                    .Where(a => a.PlayerId != context.game.MyId)
-                    .Any() ? 1 : 0;
-            }
-        }
-
-        private class InvertBool : IAppraisal<AIState>
-        {
-            private readonly IAppraisal<AIState> boolAppraisal;
-
-            public InvertBool(IAppraisal<AIState> boolAppraisal)
-            {
-                this.boolAppraisal = boolAppraisal;
-            }
-            public float GetScore(AIState context)
-            {
-                return 1 - this.boolAppraisal.GetScore(context);
-            }
-        }
-
-        private class ShieldPotionVisibleBool : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                return context.game.Loot
-                    .Where(a => a.Item is ShieldPotions)
-                    .Where(a => a.Position.WithinZone(context.game))
-                    .Any() ? 1 : 0;
-            }
-        }
-
-        private class NeedShieldPotionPct : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                var isMaxShield = (context.currentUnit.Shield == context.constants.MaxShield);
-                var pct = context.currentUnit.ShieldPotions / context.constants.MaxShieldPotionsInInventory;
-                return (float)((1 - pct) * (isMaxShield ? 0.75 : 1));
-            }
-        }
-
-        private class HaveShieldPotionBool : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                if (context.currentUnit.ShieldPotions == 0)
-                {
-                    return 0;
-                }
-
-                return 1;
-            }
-        }
-        
-        private class HaveBulletsBool : IAppraisal<AIState>
-        {
-            public float GetScore(AIState context)
-            {
-                if (context.currentUnit.Ammo[context.currentUnit.Weapon.Value] == 0)
-                {
-                    return 0;
-                }
-
-                return 1;
-            }
-        }
-
-        private class PrintAction : IAction<AIState>
-        {
-            private string action;
-
-            public PrintAction(string action)
-            {
-                this.action = action;
-            }
-
-            public void Execute(AIState context)
-            {
-                context.debug?.AddPlacedText(
-                    context.currentUnit.Position,
-                    action,
-                    new Vec2(0, 0),
-                    1,
-                    new Debugging.Color(1, 0, 0, 1));
-            }
-        }
-
-        private class SetMoveTargetToRandomPoint : IAction<AIState>
-        {
-            private static Random r = new Random();
-
-            public void Execute(AIState context)
-            {
-                if (!context.unitState.RandomPoint.WithinZone(context.game))
-                {
-                    context.unitState.RandomPoint = context.currentUnit.Position;
-                }
-
-                if (context.unitState.RandomPoint.Sub(context.currentUnit.Position).GetLengthQuad() < 16)
-                {
-                    var randomDistance = (r.NextDouble() * 2 - 1) * context.game.Zone.CurrentRadius;
-                    var randomAngle = r.NextDouble() * Math.PI * 2;
-
-                    var x = Math.Cos(randomAngle) * randomDistance + context.game.Zone.CurrentCenter.X;
-                    var y = Math.Sin(randomAngle) * randomDistance + context.game.Zone.CurrentCenter.Y;
-
-                    context.unitState.RandomPoint = new Vec2(x, y);
-                }
-
-                context.unitState.MoveToPoint = context.unitState.RandomPoint;
-            }
-        }
-
-        private class SetMoveTargetToEnemy : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                var closestEnemy = context.game.Units
-                    .Where(a => a.PlayerId != context.game.MyId)
-                    .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
-                    .Cast<Unit>()
-                    .First();
-
-                context.unitState.MoveToPoint = closestEnemy.Position;
-            }
-        }
-
-        private class SetMoveTargetToShield : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                var closestPotion = context.game.Loot
-                    .Where(a => a.Item is ShieldPotions)
-                    .Where(a => a.Position.WithinZone(context.game))
-                    .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
-                    .First();
-
-                context.debug?.AddCircle(closestPotion.Position, 1, new Debugging.Color(0, 1, 1, 0.5));
-
-                context.unitState.MoveToPoint = closestPotion.Position;
-            }
-        }
-        
-        private class TryPickBullet : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                var closestAmmo = context.game.Loot
-                    .Where(a => a.Item is Ammo)
-                    .Where(a => a.Position.WithinZone(context.game))
-                    .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
-                    .Cast<Loot?>()
-                    .FirstOrDefault();
-
-                if (closestAmmo == null){
-                    return;
-                }
-
-                if (closestAmmo.Value.Position.Sub(context.currentUnit.Position).GetLengthQuad() < context.constants.UnitRadius * context.constants.UnitRadius)
-                {
-                    context.result = new UnitOrder(
-                        context.result?.TargetVelocity ?? new Vec2(0, 0),
-                        context.result?.TargetDirection ?? new Vec2(0, 0),
-                        new ActionOrder.Pickup(closestAmmo.Value.Id));
-                }
-            }
-        }
-        
-        private class TryPickShield : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                var closestAmmo = context.game.Loot
-                    .Where(a => a.Item is ShieldPotions)
-                    .Where(a => a.Position.WithinZone(context.game))
-                    .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
-                    .Cast<Loot?>()
-                    .FirstOrDefault();
-
-                if (closestAmmo == null){
-                    return;
-                }
-
-                if (closestAmmo.Value.Position.Sub(context.currentUnit.Position).GetLengthQuad() < context.constants.UnitRadius * context.constants.UnitRadius)
-                {
-                    context.result = new UnitOrder(
-                        context.result?.TargetVelocity ?? new Vec2(0, 0),
-                        context.result?.TargetDirection ?? new Vec2(0, 0),
-                        new ActionOrder.Pickup(closestAmmo.Value.Id));
-                }
-            }
-        }
-
-        private class MoveWithInfluenceMap : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                context.communicationState.map.AddCharge(
-                    "target",
-                    new PointChargeOrigin(new Point((int)context.unitState.MoveToPoint.X, (int)(context.unitState.MoveToPoint.Y))),
-                    new ConstantInRadiusFading(float.MaxValue),
-                    10);
-
-                var forceDrection = context.communicationState.map.FindForceDirection(new Point((int)context.currentUnit.Position.X, (int)context.currentUnit.Position.Y));
-                context.communicationState.map.ClearLayer("target");
-                var move = new Vec2(forceDrection.X, forceDrection.Y);
-
-                context.result = new UnitOrder(move, context.result?.TargetDirection ?? new Vec2(0, 0), context.result?.Action);
-                // var constants = context.constants;
-                // var myUnit = context.currentUnit;
-                // var communication = context.communicationState;
-
-                // for (var x = -(int)constants.ViewDistance / 4; x < (int)constants.ViewDistance / 4; x++)
-                //     for (var y = -(int)constants.ViewDistance / 4; y < (int)constants.ViewDistance / 4; y++)
-                //     {
-                //         var pos = new Point((int)myUnit.Position.X + x, (int)myUnit.Position.Y + y);
-                //         var charge = communication.map.FindForceDirection(pos);
-                //         var chargeLength = Math.Sqrt(charge.X * charge.X + charge.Y * charge.Y);
-                //         if (chargeLength > 1)
-                //         {
-                //             context.debug?.AddPolyLine(
-                //             new Vec2[] {
-                //                 new Vec2(myUnit.Position.X + x, myUnit.Position.Y + y),
-                //                 new Vec2(myUnit.Position.X + x + charge.X / chargeLength, myUnit.Position.Y + y + charge.Y / chargeLength),
-                //                 },
-                //             0.1,
-                //             new Debugging.Color(1, 0, 0, 1));
-                //         }
-                //     }
-                // context.debug?.AddPolyLine(
-                //     new Vec2[] { context.currentUnit.Position, context.currentUnit.Position.Add(move) },
-                //     0.5,
-                //     new Debugging.Color(0, 1, 0, 1));
-
-            }
-        }
-
-        private class SetLookAtNearestEnemy : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                var closestEnemy = context.game.Units
-                    .Where(a => a.PlayerId != context.game.MyId)
-                    .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
-                    .Cast<Unit?>()
-                    .FirstOrDefault();
-
-                if (closestEnemy == null)
-                {
-                    return;
-                }
-
-                context.result = new UnitOrder(
-                    context.result?.TargetVelocity ?? new Vec2(0, 0),
-                    closestEnemy.Value.Position.Sub(context.currentUnit.Position),
-                    context.result?.Action);
-            }
-        }
-
-        private class SetLookAtMoveTarget : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                context.result = new UnitOrder(
-                    context.result?.TargetVelocity ?? new Vec2(0, 0),
-                    context.unitState.MoveToPoint.Sub(context.currentUnit.Position),
-                    context.result?.Action);
-            }
-        }
-
-        private class SetLookScan : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                context.result = new UnitOrder(
-                    context.result?.TargetVelocity ?? new Vec2(0, 0),
-                    new Vec2(-context.currentUnit.Direction.Y, context.currentUnit.Direction.X),
-                    context.result?.Action);
-            }
-        }
-
-        private class Aim : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                context.result = new UnitOrder(
-                    context.result?.TargetVelocity ?? new Vec2(0, 0),
-                    context.result?.TargetDirection ?? new Vec2(0, 0),
-                    new ActionOrder.Aim(true));
-            }
-        }
-
-        private class DrinkShield : IAction<AIState>
-        {
-            public void Execute(AIState context)
-            {
-                context.result = new UnitOrder(
-                    context.result?.TargetVelocity ?? new Vec2(0, 0),
-                    context.result?.TargetDirection ?? new Vec2(0, 0),
-                    new ActionOrder.UseShieldPotion());
-            }
-        }
-    }
+   }
 
     public static class Extensions
     {
@@ -570,4 +237,4 @@ namespace AiCup22
     {
         public VectorInfluenceMap map;
     }
-}
+ }
