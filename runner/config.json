@@ -21,6 +21,21 @@
         "token": null
       }
     },
+    {
+      "Tcp": {
+        "host": null,
+        "port": 31002,
+        "run": {
+          "run_command": [
+            "python3",
+            "../src/client-python/main.py"
+          ]
+        },
+        "accept_timeout": null,
+        "single_timeout": null,
+        "token": null
+      }
+    },
     "AutoBot",
     "AutoBot",
     "AutoBot",

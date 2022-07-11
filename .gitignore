@@ -8,4 +8,4 @@ obj/
 *.user
 /runner/preferences.json
 .vscode
-
+*.pyc
