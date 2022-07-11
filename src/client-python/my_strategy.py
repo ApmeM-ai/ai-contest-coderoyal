@@ -13,13 +13,30 @@ class MyStrategy:
         pass
     def get_order(self, game: Game, debug_interface: Optional[DebugInterface]) -> Order:
         orders = {}
-        for unit in game.units:
+        r = game.zone.next_radius
+        center = game.zone.next_center
+        Enemy = False
+        for unit in game.units:	
+            if unit.player_id == game.my_id:
+                UnitMe = unit
+        for unit in game.units:	    
             if unit.player_id != game.my_id:
-                continue
-            orders[unit.id] = UnitOrder(
-                Vec2(-unit.position.x, -unit.position.y),
-                Vec2(-unit.direction.y, unit.direction.x),
-                ActionOrder.Aim(True))
+                if Enemy and (((UnitMe.position.x - UnitEnemy.position.x)**2+(UnitMe.position.y - UnitEnemy.position.y)**2)**0.5 < ((UnitMe.position.x - unit.position.x)**2+(UnitMe.position.y - unit.position.y)**2)**0.5):
+                    continue    
+                Enemy = True
+                UnitEnemy = unit
+        if Enemy:
+            Aim = True
+            UnitPosNext = Vec2(UnitEnemy.position.x - UnitMe.position.x, UnitEnemy.position.y - UnitMe.position.y)
+            UnitDir = Vec2(UnitEnemy.position.x - UnitMe.position.x, UnitEnemy.position.y - UnitMe.position.y)
+        else:
+            Aim = False
+            UnitPosNext = Vec2(center.x-UnitMe.position.x, center.y-UnitMe.position.y)
+            UnitDir = Vec2(-UnitMe.direction.y, UnitMe.direction.x)
+        orders[UnitMe.id] = UnitOrder(
+            UnitPosNext,
+            UnitDir,
+            ActionOrder.Aim(Aim))
         return Order(orders)
     def debug_update(self, displayed_tick: int, debug_interface: DebugInterface):
         pass
