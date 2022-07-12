@@ -9,6 +9,7 @@ using BrainAI.InfluenceMap;
 using BrainAI.InfluenceMap.Fading;
 using BrainAI.InfluenceMap.VectorGenerator;
 using BrainAI.Pathfinding;
+using static AiCup22.Model.Item;
 
 namespace AiCup22
 {
@@ -39,27 +40,8 @@ namespace AiCup22
                 "border",
                 new CircleChargeOrigin(new Point((int)game.Zone.CurrentCenter.X, (int)game.Zone.CurrentCenter.Y), (int)game.Zone.CurrentRadius),
                 new LinearDistanceFading(50),
-                -(float)(constants.UnitRadius * 2 + 2) * 50
+                -(float)(constants.UnitRadius * 2 + 5) * 50
             );
-
-            this.communication.map.ClearLayer("bullet");
-            foreach (var bullet in game.Projectiles)
-            {
-                if (bullet.ShooterPlayerId == game.MyId)
-                {
-                    continue;
-                }
-
-                this.communication.map.AddCharge(
-                    "bullet",
-                    new LineChargeOrigin(
-                        new Point((int)bullet.Position.X, (int)bullet.Position.Y),
-                        new Point((int)(bullet.Position.X + bullet.Velocity.X), (int)(bullet.Position.Y + bullet.Velocity.Y))
-                        ),
-                    new LinearDistanceFading(50),
-                    -(float)(constants.UnitRadius * 2 + 2) * 50
-                );
-            }
 
             foreach (var myUnit in myUnits)
             {
@@ -68,7 +50,7 @@ namespace AiCup22
                     units[myUnit.Id] = new UnitState();
                 }
 
-                var aiState = new AIState
+                var context = new AIState
                 {
                     constants = constants,
                     game = game,
@@ -79,10 +61,13 @@ namespace AiCup22
                     unitState = units[myUnit.Id]
                 };
 
-                AI.SelectBestAction(aiState).Execute(aiState);
-                new ShowInfluenceMap().Execute(aiState);
+                this.AddBulletsToInfluenceMap(context);
+                this.AddVisibleLootToInfluenceMap(context);
+                AI.SelectBestAction(context).Execute(context);
+                this.ShowInfluenceMap(context);
+                this.SetLastState(context);
 
-                result.Add(myUnit.Id, aiState.result.Value);
+                result.Add(myUnit.Id, context.result.Value);
             }
 
             return new Order(result);
@@ -104,32 +89,36 @@ namespace AiCup22
         {
             var reasoner = new HighestScoreReasoner<AIState>();
 
-
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new HaveShieldPotionBool(),
-                        new InvertBool(new ShieldPct()),
-                        new CanHitEnemyBool(),
+                        new HaveShieldPotionBool(),                // Have shield potion
+                        new InvertBool(new ShieldPct()),           // Not enough shield
+                        new EnemyCanHitBool(),                     // Under attack
                         new FixedScoreAppraisal<AIState>(200)
                     ),
                 new PrintAction("Прячусь!"),
                 new SetMoveTargetToRandomPoint(),
+                new TrySetMoveTargetFromEnemy(),
                 new MoveWithInfluenceMap(),
-                new SetLookAtMoveTarget(),
+                new SetLookAtNearestEnemy(),
+                new Aim(),
                 new TryPickBullet(),
                 new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new HaveShieldPotionBool(),
-                        new InvertBool(new ShieldPct()),
-                        new InvertBool(new CanHitEnemyBool()),
-                        new FixedScoreAppraisal<AIState>(160)
+                        new HaveShieldPotionBool(),                // Have shield potion
+                        new InvertBool(new ShieldPct()),           // Not enough shield
+                        new InvertBool(new EnemyCanHitBool()),     // Safe as visible
+                        new FixedScoreAppraisal<AIState>(200)
                     ),
                 new PrintAction("Лечусь!"),
-                new DrinkShield());
+                new SetLookScan(),
+                new SetLookAtNearestEnemy(),
+                new UseShieldPotion());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new NeedShieldPotionPct(),
-                        new ShieldPotionVisibleBool(),
+                        new InvertBool(new HaveShieldPotionBool()), // Do not have shield potion
+                        new InvertBool(new ShieldPct()),            // Not enough shield
+                        new ShieldPotionVisibleBool(),              // Shield potion within sight range
                         new FixedScoreAppraisal<AIState>(200)
                     ),
                 new PrintAction("Нужна выпивка!"),
@@ -140,9 +129,21 @@ namespace AiCup22
                 new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyVisibleBool(),
-                        new InvertBool(new CanHitEnemyBool()),
-                        new HaveBulletsBool(),
+                        new InvertBool(new HaveBulletsBool()),      // We do not have bullets for our weapon
+                        new RequiredBulletVisibleBool(),            // We see ruired bullets
+                        new FixedScoreAppraisal<AIState>(150)
+                    ),
+                new PrintAction("Пульки!"),
+                new SetMoveTargetToRequiredBullets(),
+                new MoveWithInfluenceMap(),
+                new SetLookAtMoveTarget(),
+                new TryPickShield(),
+                new TryPickBullet());
+
+            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
+                        new EnemyVisibleBool(),                     // Enemy is visible
+                        new InvertBool(new CanHitEnemyBool()),      // We can not hit them
+                        new HaveBulletsBool(),                      // We have bullets
                         new FixedScoreAppraisal<AIState>(100)
                     ),
                 new PrintAction("Догонялки!"),
@@ -153,9 +154,9 @@ namespace AiCup22
                 new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyVisibleBool(),
-                        new CanHitEnemyBool(),
-                        new HaveBulletsBool(),
+                        new EnemyVisibleBool(),                     // Enemy is visible
+                        new CanHitEnemyBool(),                      // We can hit them
+                        new HaveBulletsBool(),                      // We have bullets
                         new FixedScoreAppraisal<AIState>(100)
                     ),
                 new PrintAction("Убиывлки!"),
@@ -176,7 +177,80 @@ namespace AiCup22
 
             return reasoner;
         }
-   }
+
+        private void SetLastState(AIState aiState)
+        {
+            aiState.unitState.PreviousUnit = aiState.currentUnit;
+        }
+
+        private void AddBulletsToInfluenceMap(AIState context)
+        {
+            context.communicationState.map.ClearLayer("bullet");
+            foreach (var bullet in context.game.Projectiles)
+            {
+                if (bullet.ShooterId == context.currentUnit.Id)
+                {
+                    continue;
+                }
+
+                this.communication.map.AddCharge(
+                    "bullet",
+                    new LineChargeOrigin(
+                        new Point((int)bullet.Position.X, (int)bullet.Position.Y),
+                        new Point((int)(bullet.Position.X + bullet.Velocity.X), (int)(bullet.Position.Y + bullet.Velocity.Y))
+                        ),
+                    new LinearDistanceFading(50),
+                    -(float)(constants.UnitRadius * 2 + 2) * 50
+                );
+            }
+        }
+
+        private void AddVisibleLootToInfluenceMap(AIState context)
+        {
+            this.communication.map.ClearLayer("loot");
+            foreach (var loot in context.game.Loot)
+            {
+                if ((loot.Item is not Ammo || ((Ammo)loot.Item).WeaponTypeIndex != context.currentUnit.Weapon.Value || context.currentUnit.Ammo[context.currentUnit.Weapon.Value] >= context.constants.Weapons[context.currentUnit.Weapon.Value].MaxInventoryAmmo) &&
+                    (loot.Item is not ShieldPotions || context.currentUnit.ShieldPotions >= context.constants.MaxShieldPotionsInInventory))
+                {
+                    continue;
+                }
+
+                this.communication.map.AddCharge(
+                    "loot",
+                    new PointChargeOrigin(new Point((int)loot.Position.X, (int)loot.Position.Y)),
+                    new LinearDistanceFading(10),
+                    (float)(constants.UnitRadius * 2 + 2) * 10
+                );
+            }
+        }
+
+        private void ShowInfluenceMap(AIState context)
+        {
+            if(context.debug == null)
+            {
+                return;
+            }
+
+            for (var x = -(int)context.constants.ViewDistance / 4; x < (int)context.constants.ViewDistance / 4; x++)
+                for (var y = -(int)context.constants.ViewDistance / 4; y < (int)context.constants.ViewDistance / 4; y++)
+                {
+                    var pos = new Point((int)context.currentUnit.Position.X + x, (int)context.currentUnit.Position.Y + y);
+                    var charge = context.communicationState.map.FindForceDirection(pos);
+                    var chargeLength = Math.Sqrt(charge.X * charge.X + charge.Y * charge.Y);
+                    if (chargeLength > 1)
+                    {
+                        context.debug?.AddPolyLine(
+                        new Vec2[] {
+                                new Vec2(context.currentUnit.Position.X + x, context.currentUnit.Position.Y + y),
+                                new Vec2(context.currentUnit.Position.X + x + charge.X / chargeLength, context.currentUnit.Position.Y + y + charge.Y / chargeLength),
+                            },
+                        0.1,
+                        new Debugging.Color(1, 0, 0, 1));
+                    }
+                }
+        }
+    }
 
     public static class Extensions
     {
@@ -231,10 +305,11 @@ namespace AiCup22
     {
         public Vec2 MoveToPoint;
         public Vec2 RandomPoint = new Vec2(0, 0);
+        public Unit PreviousUnit;
     }
 
     public class CommunicationState
     {
         public VectorInfluenceMap map;
     }
- }
+}

@@ -3,7 +3,7 @@ using BrainAI.AI.UtilityAI.Actions;
 
 namespace AiCup22
 {
-    public class DrinkShield : IAction<AIState>
+    public class UseShieldPotion : IAction<AIState>
         {
             public void Execute(AIState context)
             {
