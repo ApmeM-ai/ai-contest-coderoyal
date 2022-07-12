@@ -8,7 +8,8 @@ namespace AiCup22
     {
         public float GetScore(AIState context)
         {
-            return context.game.Loot
+            return context.communicationState.LootMemory
+                .Select(a => a.Item)
                 .Where(a => a.Item is Ammo)
                 .Where(a => ((Ammo)a.Item).WeaponTypeIndex == context.currentUnit.Weapon.Value)
                 .Any() ? 1 : 0;

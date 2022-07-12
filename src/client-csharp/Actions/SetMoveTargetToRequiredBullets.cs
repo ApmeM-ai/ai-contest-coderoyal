@@ -8,7 +8,8 @@ namespace AiCup22
     {
         public void Execute(AIState context)
         {
-            var closestPotion = context.game.Loot
+            var closestPotion = context.communicationState.LootMemory
+                .Select(a => a.Item)
                 .Where(a => a.Item is Ammo)
                 .Where(a => ((Ammo)a.Item).WeaponTypeIndex == context.currentUnit.Weapon.Value)
                 .Where(a => a.Position.WithinZone(context.game))

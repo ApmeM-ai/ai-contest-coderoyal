@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using AiCup22.Model;
 using AiCup22.UtilityAI.Appraisals;
@@ -15,13 +14,15 @@ namespace AiCup22
 {
     public class MyStrategy
     {
+        private const int LOOT_TICK_MEMORY = 32;
+        private const int ENEMY_TICK_MEMORY = 32;
+
         private readonly Constants constants;
         private readonly Reasoner<AIState> AI;
         private readonly CommunicationState communication = new CommunicationState();
 
         public MyStrategy(Constants constants)
         {
-            Console.WriteLine(constants.InitialZoneRadius);
             this.constants = constants;
             this.AI = BuildAI();
             this.communication.map = new VectorInfluenceMap();
@@ -43,6 +44,11 @@ namespace AiCup22
                 -(float)(constants.UnitRadius * 2 + 5) * 50
             );
 
+            this.UpdateMemoryLoot(game);
+            this.ShowMemoryLoot(debugInterface);
+            this.UpdateMemoryEnemy(game);
+            this.ShowMemoryEnemy(debugInterface);
+
             foreach (var myUnit in myUnits)
             {
                 if (!units.ContainsKey(myUnit.Id))
@@ -52,12 +58,12 @@ namespace AiCup22
 
                 var context = new AIState
                 {
-                    constants = constants,
+                    constants = this.constants,
                     game = game,
                     currentUnit = myUnit,
                     result = null,
                     debug = debugInterface,
-                    communicationState = communication,
+                    communicationState = this.communication,
                     unitState = units[myUnit.Id]
                 };
 
@@ -65,13 +71,14 @@ namespace AiCup22
                 this.AddVisibleLootToInfluenceMap(context);
                 AI.SelectBestAction(context).Execute(context);
                 this.ShowInfluenceMap(context);
-                this.SetLastState(context);
+                this.UpdatePreviousUnit(context);
 
                 result.Add(myUnit.Id, context.result.Value);
             }
 
             return new Order(result);
         }
+
 
         public void DebugUpdate(int displayedTick, DebugInterface debugInterface)
         {
@@ -99,8 +106,7 @@ namespace AiCup22
                 new SetMoveTargetToRandomPoint(),
                 new TrySetMoveTargetFromEnemy(),
                 new MoveWithInfluenceMap(),
-                new SetLookAtNearestEnemy(),
-                new Aim(),
+                new SetLookScan(),
                 new TryPickBullet(),
                 new TryPickShield());
 
@@ -112,7 +118,6 @@ namespace AiCup22
                     ),
                 new PrintAction("Лечусь!"),
                 new SetLookScan(),
-                new SetLookAtNearestEnemy(),
                 new UseShieldPotion());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
@@ -124,9 +129,11 @@ namespace AiCup22
                 new PrintAction("Нужна выпивка!"),
                 new SetMoveTargetToShield(),
                 new MoveWithInfluenceMap(),
-                new SetLookAtMoveTarget(),
+                new SetLookScan(),
                 new TryPickBullet(),
                 new TryPickShield());
+
+            // ToDo: unknown sound
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new InvertBool(new HaveBulletsBool()),      // We do not have bullets for our weapon
@@ -136,12 +143,12 @@ namespace AiCup22
                 new PrintAction("Пульки!"),
                 new SetMoveTargetToRequiredBullets(),
                 new MoveWithInfluenceMap(),
-                new SetLookAtMoveTarget(),
+                new SetLookScan(),
                 new TryPickShield(),
                 new TryPickBullet());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyVisibleBool(),                     // Enemy is visible
+                        new EnemyKnownBool(),                     // Enemy is visible
                         new InvertBool(new CanHitEnemyBool()),      // We can not hit them
                         new HaveBulletsBool(),                      // We have bullets
                         new FixedScoreAppraisal<AIState>(100)
@@ -154,7 +161,7 @@ namespace AiCup22
                 new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyVisibleBool(),                     // Enemy is visible
+                        new EnemyKnownBool(),                     // Enemy is visible
                         new CanHitEnemyBool(),                      // We can hit them
                         new HaveBulletsBool(),                      // We have bullets
                         new FixedScoreAppraisal<AIState>(100)
@@ -178,7 +185,91 @@ namespace AiCup22
             return reasoner;
         }
 
-        private void SetLastState(AIState aiState)
+        private void ShowMemoryLoot(DebugInterface debugInterface)
+        {
+            if (debugInterface == null)
+            {
+                return;
+            }
+
+            foreach (var item in this.communication.LootMemory)
+            {
+                debugInterface.AddCircle(
+                    item.Item.Position,
+                    1,
+                    new Debugging.Color(0, 1, 0, 0.5 * ((double)item.TimeLeft) / LOOT_TICK_MEMORY));
+            }
+        }
+
+        private void ShowMemoryEnemy(DebugInterface debugInterface)
+        {
+            if (debugInterface == null)
+            {
+                return;
+            }
+
+            foreach (var item in this.communication.EnemyMemory)
+            {
+                debugInterface.AddCircle(
+                    item.Item.Position,
+                    constants.MaxUnitForwardSpeed / constants.TicksPerSecond * (ENEMY_TICK_MEMORY - item.TimeLeft),
+                    new Debugging.Color(1, 1, 0, 0.5 * ((double)item.TimeLeft) / ENEMY_TICK_MEMORY));
+            }
+        }
+
+        private void UpdateMemoryEnemy(Game game)
+        {
+            this.communication.EnemyMemory = this.communication.EnemyMemory
+                .Where(a => a.TimeLeft > 0)
+                .ExceptBy(game.Units.Select(a => a.Id), a => a.Item.Id)
+                .ToList();
+
+            foreach (var old in this.communication.EnemyMemory)
+            {
+                old.TimeLeft--;
+            }
+            foreach (var added in game.Units.Where(a => a.PlayerId != game.MyId))
+            {
+                this.communication.EnemyMemory.Add(new Memory<Unit>(added, ENEMY_TICK_MEMORY));
+            }
+
+            var allSounds = constants.Weapons
+                .Select(a => a.ShotSoundTypeIndex)
+                .Union(new[] { constants.StepsSoundTypeIndex })
+                .ToHashSet();
+
+            var soundPositions = game.Sounds.Where(a => allSounds.Contains(a.TypeIndex)).Select(a => a.Position);
+            foreach (var sound in soundPositions)
+            {
+                foreach(var enemySound in this.communication.EnemyMemory
+                    .Where(a => 
+                        a.Item.Position.Sub(sound).GetLengthQuad() <
+                        constants.MaxUnitForwardSpeed / constants.TicksPerSecond * (ENEMY_TICK_MEMORY - a.TimeLeft) *
+                        constants.MaxUnitForwardSpeed / constants.TicksPerSecond * (ENEMY_TICK_MEMORY - a.TimeLeft)))
+                {
+                    enemySound.TimeLeft = ENEMY_TICK_MEMORY;
+                }
+            }
+        }
+
+        private void UpdateMemoryLoot(Game game)
+        {
+            this.communication.LootMemory = this.communication.LootMemory
+                .Where(a => a.TimeLeft > 0)
+                .ExceptBy(game.Loot.Select(a => a.Id), a => a.Item.Id)
+                .ToList();
+
+            foreach (var old in this.communication.LootMemory)
+            {
+                old.TimeLeft--;
+            }
+            foreach (var added in game.Loot)
+            {
+                this.communication.LootMemory.Add(new Memory<Loot>(added, LOOT_TICK_MEMORY));
+            }
+        }
+
+        private void UpdatePreviousUnit(AIState aiState)
         {
             aiState.unitState.PreviousUnit = aiState.currentUnit;
         }
@@ -208,8 +299,10 @@ namespace AiCup22
         private void AddVisibleLootToInfluenceMap(AIState context)
         {
             this.communication.map.ClearLayer("loot");
-            foreach (var loot in context.game.Loot)
+            foreach (var lootMemory in context.communicationState.LootMemory)
             {
+                var loot = lootMemory.Item;
+
                 if ((loot.Item is not Ammo || ((Ammo)loot.Item).WeaponTypeIndex != context.currentUnit.Weapon.Value || context.currentUnit.Ammo[context.currentUnit.Weapon.Value] >= context.constants.Weapons[context.currentUnit.Weapon.Value].MaxInventoryAmmo) &&
                     (loot.Item is not ShieldPotions || context.currentUnit.ShieldPotions >= context.constants.MaxShieldPotionsInInventory))
                 {
@@ -227,7 +320,7 @@ namespace AiCup22
 
         private void ShowInfluenceMap(AIState context)
         {
-            if(context.debug == null)
+            if (context.debug == null)
             {
                 return;
             }
@@ -311,5 +404,19 @@ namespace AiCup22
     public class CommunicationState
     {
         public VectorInfluenceMap map;
+        public List<Memory<Loot>> LootMemory = new List<Memory<Loot>>();
+        public List<Memory<Unit>> EnemyMemory = new List<Memory<Unit>>();
+    }
+
+    public class Memory<T>
+    {
+        public Memory(T item, int timeLeft)
+        {
+            Item = item;
+            TimeLeft = timeLeft;
+        }
+
+        public T Item;
+        public int TimeLeft;
     }
 }
