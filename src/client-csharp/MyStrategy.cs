@@ -46,6 +46,8 @@ namespace AiCup22
 
             this.UpdateMemoryLoot(game);
             this.ShowMemoryLoot(debugInterface);
+            this.UpdateMemoryBullet(game);
+            this.ShowMemoryBullet(debugInterface);
             this.UpdateMemoryEnemy(game);
             this.ShowMemoryEnemy(debugInterface);
 
@@ -148,7 +150,7 @@ namespace AiCup22
                 new TryPickBullet());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyKnownBool(),                     // Enemy is visible
+                        new EnemyKnownBool(),                       // Enemy is visible
                         new InvertBool(new CanHitEnemyBool()),      // We can not hit them
                         new HaveBulletsBool(),                      // We have bullets
                         new FixedScoreAppraisal<AIState>(100)
@@ -161,7 +163,7 @@ namespace AiCup22
                 new TryPickShield());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyKnownBool(),                     // Enemy is visible
+                        new EnemyKnownBool(),                       // Enemy is visible
                         new CanHitEnemyBool(),                      // We can hit them
                         new HaveBulletsBool(),                      // We have bullets
                         new FixedScoreAppraisal<AIState>(100)
@@ -217,6 +219,51 @@ namespace AiCup22
             }
         }
 
+        private void ShowMemoryBullet(DebugInterface debugInterface)
+        {
+            if (debugInterface == null)
+            {
+                return;
+            }
+
+            foreach (var item in this.communication.BulletMemory)
+            {
+                debugInterface.AddCircle(
+                    item.Item.Position,
+                    0.5,
+                    new Debugging.Color(1, 0, 0, 0.5));
+            }
+        }
+
+        private void UpdateMemoryBullet(Game game)
+        {
+            this.communication.BulletMemory = this.communication.BulletMemory
+                .Where(a => a.TimeLeft > 0)
+                .ExceptBy(game.Projectiles.Select(a => a.Id), a => a.Item.Id)
+                .ToList();
+
+            foreach (var old in this.communication.BulletMemory)
+            {
+                old.TimeLeft--;
+                old.Item.Position = old.Item.Position.Add(old.Item.Velocity.Div(constants.TicksPerSecond));
+                var isHitObstacle = constants.Obstacles
+                        .Where(b => !b.CanShootThrough)
+                        .Select(b => new ValueTuple<Vec2, double>(b.Position, b.Radius))
+                        .Union(game.Units
+                                .Select(b => new ValueTuple<Vec2, double>(b.Position, constants.UnitRadius)))
+                        .Any(b => b.Item1.Sub(old.Item.Position).GetLengthQuad() < b.Item2 * b.Item2);
+                if (isHitObstacle)
+                {
+                    old.TimeLeft = 0;
+                }
+            }
+            foreach (var added in game.Projectiles)
+            {
+                var timeLeft = added.LifeTime * constants.TicksPerSecond;
+                this.communication.BulletMemory.Add(new Memory<Projectile>(added, (int)timeLeft));
+            }
+        }
+
         private void UpdateMemoryEnemy(Game game)
         {
             this.communication.EnemyMemory = this.communication.EnemyMemory
@@ -241,8 +288,8 @@ namespace AiCup22
             var soundPositions = game.Sounds.Where(a => allSounds.Contains(a.TypeIndex)).Select(a => a.Position);
             foreach (var sound in soundPositions)
             {
-                foreach(var enemySound in this.communication.EnemyMemory
-                    .Where(a => 
+                foreach (var enemySound in this.communication.EnemyMemory
+                    .Where(a =>
                         a.Item.Position.Sub(sound).GetLengthQuad() <
                         constants.MaxUnitForwardSpeed / constants.TicksPerSecond * (ENEMY_TICK_MEMORY - a.TimeLeft) *
                         constants.MaxUnitForwardSpeed / constants.TicksPerSecond * (ENEMY_TICK_MEMORY - a.TimeLeft)))
@@ -277,8 +324,10 @@ namespace AiCup22
         private void AddBulletsToInfluenceMap(AIState context)
         {
             context.communicationState.map.ClearLayer("bullet");
-            foreach (var bullet in context.game.Projectiles)
+            foreach (var bulletMemory in context.communicationState.BulletMemory)
             {
+                var bullet = bulletMemory.Item;
+                // ToDo: multi unit control
                 if (bullet.ShooterId == context.currentUnit.Id)
                 {
                     continue;
@@ -406,6 +455,7 @@ namespace AiCup22
         public VectorInfluenceMap map;
         public List<Memory<Loot>> LootMemory = new List<Memory<Loot>>();
         public List<Memory<Unit>> EnemyMemory = new List<Memory<Unit>>();
+        public List<Memory<Projectile>> BulletMemory = new List<Memory<Projectile>>();
     }
 
     public class Memory<T>
