@@ -110,10 +110,12 @@ namespace AiCup22
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new HaveShieldPotionBool(),                // Have shield potion
                         new InvertBool(new ShieldPct()),           // Not enough shield
-                        new InvertBool(new EnemyCanHitBool()),     // Safe as visible
                         new FixedScoreAppraisal<AIState>(300)
                     ),
                 new PrintAction("Лечусь!"),
+                new SetMoveTargetToRandomPoint(),
+                // new TrySetMoveTargetFromEnemy(),
+                new MoveWithInfluenceMap(),
                 new SetLookScan(),
                 new UseShieldPotion());
 
@@ -139,19 +141,6 @@ namespace AiCup22
                 new MoveWithInfluenceMap(),
                 new SetLookScan(),
                 new PickupLoot());
-
-            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new HaveShieldPotionBool(),                // Have shield potion
-                        new InvertBool(new ShieldPct()),           // Not enough shield
-                        new EnemyCanHitBool(),                     // Under attack
-                        new FixedScoreAppraisal<AIState>(200)
-                    ),
-                new PrintAction("Прячусь!"),
-                new SetMoveTargetToRandomPoint(),
-                // new TrySetMoveTargetFromEnemy(),
-                new MoveWithInfluenceMap(),
-                new SetLookScan(),
-                new Aim());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new InvertBool(new HaveShieldPotionBool()), // Do not have shield potion
