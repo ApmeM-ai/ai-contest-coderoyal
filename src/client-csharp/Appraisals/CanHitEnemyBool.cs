@@ -63,7 +63,7 @@ namespace AiCup22
                     if (distance < tree.Radius)
                     {
                         treeIsOnTheWay = true;
-                        context.debug.AddCircle(tree.Position, tree.Radius, new Debugging.Color(0, 0, 0, 1));
+                        context.debug?.AddCircle(tree.Position, tree.Radius, new Debugging.Color(0, 0, 0, 1));
                         break;
                     }
                 }
