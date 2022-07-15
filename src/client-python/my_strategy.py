@@ -32,6 +32,9 @@ class MyStrategy:
     def distanceM(self, point1, point2):
         dist = ((point1.position.x - point2.position.x)**2+(point1.position.y - point2.position.y)**2)**0.5
         return dist
+    def distanceBullet(self, bullet, point2):
+        dist = ((bullet.position.x + bullet.velocity.x / self.const.ticks_per_second - point2.position.x)**2+(bullet.position.y + bullet.velocity.y / self.const.ticks_per_second - point2.position.y)**2)**0.5
+        return dist
     def hasEnemy(self, myUnit, enemyUnit):
         if myUnit.health < self.const.unit_health:
             UnitPosNext = Vec2(myUnit.position.x - myUnit.position.x, myUnit.position.y - myUnit.position.y)
@@ -42,15 +45,29 @@ class MyStrategy:
             UnitPosNext,
             UnitDir,
             ActionOrder.Aim(True))
+    def findBullet(self, game, myUnit):
+        for bullet in game.projectiles:
+            if bullet.shooter_player_id == myUnit.player_id:
+                continue
+            if self.distanceBullet(bullet, myUnit) > self.const.unit_radius*20:
+                continue
+            return Vec2(myUnit.position.x - bullet.velocity.y*100, myUnit.position.y + bullet.velocity.x*100)
+        return False
     def nextPoint(self, game, myUnit):
-        nearestEnemy = self.findNearestEnemy(game,myUnit)
         if myUnit.weapon == 0 or myUnit.weapon == 1 or myUnit.wepon == None:
-            point = self.findLoot(game, myUnit, Weapon)
+            nearestLoot = self.findLoot(game, myUnit, Weapon)
+            if nearestLoot:
+                point = Vec2(nearestLoot.position.x - myUnit.position.x, nearestLoot.position.y - myUnit.position.y)
+        nearestEnemy = self.findNearestEnemy(game,myUnit)
         if nearestEnemy:
-            if myUnit.health < self.const.unit_health:
-                point = Vec2(myUnit.position.x - nearestEnemy.position.x, myUnit.position.y - nearestEnemy.position.y)
+            bullet = self.findBullet(game, myUnit)
+            if bullet:
+                point = bullet
             else:
-                point = Vec2(nearestEnemy.position.x - myUnit.position.x, nearestEnemy.position.y - myUnit.position.y)
+                if myUnit.health < self.const.unit_health:
+                    point = Vec2(myUnit.position.x - nearestEnemy.position.x, myUnit.position.y - nearestEnemy.position.y)
+                else:
+                    point = Vec2(nearestEnemy.position.x - myUnit.position.x, nearestEnemy.position.y - myUnit.position.y)
         else:
             nearestLoot = self.findLoot(game, myUnit, ShieldPotions)
             if nearestLoot:
@@ -67,7 +84,11 @@ class MyStrategy:
                     if nearestLoot:
                         point = Vec2(nearestLoot.position.x - myUnit.position.x, nearestLoot.position.y - myUnit.position.y)
                     else:
-                        point = game.zone.next_center
+                        point = game.zone.next_center        
+        if myUnit.ammo[myUnit.weapon]==0:
+            nearestLoot = self.findLoot(game, myUnit, Ammo)
+            if nearestLoot:
+                point = Vec2(nearestLoot.position.x - myUnit.position.x, nearestLoot.position.y - myUnit.position.y)
         return point
     def nextDir(self, game,myUnit):
         nearestEnemy = self.findNearestEnemy(game,myUnit)
