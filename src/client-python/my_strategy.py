@@ -16,7 +16,6 @@ class MyStrategy:
         pass
     def get_order(self, game: Game, debug_interface: Optional[DebugInterface]) -> Order:
         orders = {}
-        debug_interface.add_placed_text(self.findMe(game).position, str(True), Vec2(0,0), 1, Color(1,0,1,1))   
         me = self.findMe(game)
         for unit in game.units:
             if unit.player_id != game.my_id:
