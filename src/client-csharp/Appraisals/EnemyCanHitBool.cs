@@ -20,7 +20,6 @@ namespace AiCup22
                 }
 
 
-                // ToDo: calculate safe distance based on weapon characteristics.
                 float safeDistance = 2;
                 var weaponData = context.constants.Weapons[closestEnemy.Weapon.Value];
                 if (closestEnemy.Position.Sub(context.currentUnit.Position).GetLengthQuad() <

@@ -7,9 +7,7 @@ namespace AiCup22
     {
         public float GetScore(AIState context)
         {
-            return context.communicationState.EnemyMemory
-                .Select(a => a.Item)
-                .Any() ? 1 : 0;
+            return context.communicationState.EnemyMemory.Any() ? 1 : 0;
         }
     }
 }

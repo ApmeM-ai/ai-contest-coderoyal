@@ -1,35 +1,29 @@
-using System;
 using System.Linq;
 using AiCup22.Model;
-using BrainAI.AI.UtilityAI.Actions;
+using AiCup22.UtilityAI.Appraisals;
 using static AiCup22.Model.Item;
 
 namespace AiCup22
 {
-    public class PickupLoot : IAction<AIState>
+    public class ShouldPickupLootBool : IAppraisal<AIState>
     {
-        public void Execute(AIState context)
+        public float GetScore(AIState context)
         {
             var closestAmmo = context.communicationState.LootMemory
                 .Select(a => a.Item)
                 .Where(a => IsRequired(context, a.Item))
                 .Where(a => a.Position.WithinZone(context.game))
+                .Where(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad() < context.constants.UnitRadius * context.constants.UnitRadius)
                 .OrderBy(a => a.Position.Sub(context.currentUnit.Position).GetLengthQuad())
                 .Cast<Loot?>()
                 .FirstOrDefault();
 
             if (closestAmmo == null)
             {
-                return;
+                return 0;
             }
 
-            if (closestAmmo.Value.Position.Sub(context.currentUnit.Position).GetLengthQuad() < context.constants.UnitRadius * context.constants.UnitRadius)
-            {
-                context.result = new UnitOrder(
-                    context.result?.TargetVelocity ?? new Vec2(0, 0),
-                    context.result?.TargetDirection ?? new Vec2(0, 0),
-                    new ActionOrder.Pickup(closestAmmo.Value.Id));
-            }
+            return 1;
         }
 
         private bool IsRequired(AIState context, Item item)

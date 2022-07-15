@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiCup22.Model;
 using AiCup22.UtilityAI.Appraisals;
+using AiCup22.Utils;
 using BrainAI.AI.UtilityAI.Reasoners;
 using BrainAI.InfluenceMap;
 using BrainAI.InfluenceMap.Fading;
@@ -26,6 +27,10 @@ namespace AiCup22
             this.constants = constants;
             this.AI = BuildAI();
             this.communication.map = new VectorInfluenceMap();
+            foreach (var tree in this.constants.Obstacles.Where(a => !a.CanShootThrough))
+            {
+                this.communication.SpatialHash.Register(tree, (int)(tree.Position.X - tree.Radius), (int)(tree.Position.Y - tree.Radius), (int)(tree.Radius * 2), (int)(tree.Radius * 2));
+            }
         }
 
         Dictionary<int, UnitState> units = new Dictionary<int, UnitState>();
@@ -90,13 +95,50 @@ namespace AiCup22
         {
         }
 
-        /// Враг далеко, жизней много - подойти
-        /// Жизней мало и есть аптечки - применить
-        /// Врагов нет и видна аптечка - подобрать
-        /// Враг есть и жизней мало и нет аптечки - убегать и искать аптечку
         public static Reasoner<AIState> BuildAI()
         {
+            // ToDo:
+            // Подбор оружия
+            // Прячусь нормально прятаться
+            // Приближаться чтобы была возможность увернуться
+            // Группировать пульки от пулемета
+            // Звук ниоткуда
+            // Пить у края
+            // Подбор оружия
             var reasoner = new HighestScoreReasoner<AIState>();
+
+            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
+                        new HaveShieldPotionBool(),                // Have shield potion
+                        new InvertBool(new ShieldPct()),           // Not enough shield
+                        new InvertBool(new EnemyCanHitBool()),     // Safe as visible
+                        new FixedScoreAppraisal<AIState>(300)
+                    ),
+                new PrintAction("Лечусь!"),
+                new SetLookScan(),
+                new UseShieldPotion());
+
+            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
+                        new CanHitEnemyBool(),                      // We can hit them
+                        new MaxAimBool(),                           // Ready to shoot
+                        new InvertBool(new ShootCooldownBool()),    // Weapon is not on cooldown
+                        new HaveBulletsBool(),                      // We have bullets
+                        new FixedScoreAppraisal<AIState>(250)
+                    ),
+                new PrintAction("Стреляю!"),
+                new SetMoveTargetToEnemy(),
+                new MoveWithInfluenceMap(),
+                new SetLookAtMoveTarget(),
+                new Shoot());
+
+            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
+                        new ShouldPickupLootBool(),
+                        new FixedScoreAppraisal<AIState>(250)
+                    ),
+                new PrintAction("Хватаю лут."),
+                new SetMoveTargetToShield(),
+                new MoveWithInfluenceMap(),
+                new SetLookScan(),
+                new PickupLoot());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new HaveShieldPotionBool(),                // Have shield potion
@@ -106,21 +148,10 @@ namespace AiCup22
                     ),
                 new PrintAction("Прячусь!"),
                 new SetMoveTargetToRandomPoint(),
-                new TrySetMoveTargetFromEnemy(),
+                // new TrySetMoveTargetFromEnemy(),
                 new MoveWithInfluenceMap(),
                 new SetLookScan(),
-                new TryPickBullet(),
-                new TryPickShield());
-
-            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new HaveShieldPotionBool(),                // Have shield potion
-                        new InvertBool(new ShieldPct()),           // Not enough shield
-                        new InvertBool(new EnemyCanHitBool()),     // Safe as visible
-                        new FixedScoreAppraisal<AIState>(200)
-                    ),
-                new PrintAction("Лечусь!"),
-                new SetLookScan(),
-                new UseShieldPotion());
+                new Aim());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new InvertBool(new HaveShieldPotionBool()), // Do not have shield potion
@@ -128,26 +159,22 @@ namespace AiCup22
                         new ShieldPotionVisibleBool(),              // Shield potion within sight range
                         new FixedScoreAppraisal<AIState>(200)
                     ),
-                new PrintAction("Нужна выпивка!"),
+                new PrintAction("Иду за выпивкой!"),
                 new SetMoveTargetToShield(),
                 new MoveWithInfluenceMap(),
                 new SetLookScan(),
-                new TryPickBullet(),
-                new TryPickShield());
-
-            // ToDo: unknown sound
+                new Aim());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new InvertBool(new HaveBulletsBool()),      // We do not have bullets for our weapon
                         new RequiredBulletVisibleBool(),            // We see ruired bullets
                         new FixedScoreAppraisal<AIState>(150)
                     ),
-                new PrintAction("Пульки!"),
+                new PrintAction("Иду за пульками!"),
                 new SetMoveTargetToRequiredBullets(),
                 new MoveWithInfluenceMap(),
                 new SetLookScan(),
-                new TryPickShield(),
-                new TryPickBullet());
+                new Aim());
 
             reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
                         new EnemyKnownBool(),                       // Enemy is visible
@@ -156,19 +183,6 @@ namespace AiCup22
                         new FixedScoreAppraisal<AIState>(100)
                     ),
                 new PrintAction("Догонялки!"),
-                new SetMoveTargetToEnemy(),
-                new MoveWithInfluenceMap(),
-                new SetLookAtMoveTarget(),
-                new TryPickBullet(),
-                new TryPickShield());
-
-            reasoner.Add(new MultiplyOfchildrenAppraisal<AIState>(
-                        new EnemyKnownBool(),                       // Enemy is visible
-                        new CanHitEnemyBool(),                      // We can hit them
-                        new HaveBulletsBool(),                      // We have bullets
-                        new FixedScoreAppraisal<AIState>(100)
-                    ),
-                new PrintAction("Убиывлки!"),
                 new SetMoveTargetToEnemy(),
                 new MoveWithInfluenceMap(),
                 new SetLookAtMoveTarget(),
@@ -181,8 +195,7 @@ namespace AiCup22
                 new SetMoveTargetToRandomPoint(),
                 new MoveWithInfluenceMap(),
                 new SetLookScan(),
-                new TryPickBullet(),
-                new TryPickShield());
+                new Aim());
 
             return reasoner;
         }
@@ -327,8 +340,16 @@ namespace AiCup22
             foreach (var bulletMemory in context.communicationState.BulletMemory)
             {
                 var bullet = bulletMemory.Item;
-                // ToDo: multi unit control
-                if (bullet.ShooterId == context.currentUnit.Id)
+
+                var vectorToMe = context.currentUnit.Position.Sub(bullet.Position);
+                var angleToHit = vectorToMe.AngleBetweeVec(bullet.Velocity);
+                if (angleToHit > Math.PI / 4)
+                {
+                    continue;
+                }
+
+                var distanceToMe = vectorToMe.GetLengthQuad();
+                if (distanceToMe > bullet.Velocity.Mul(bullet.LifeTime).GetLengthQuad())
                 {
                     continue;
                 }
@@ -405,6 +426,10 @@ namespace AiCup22
         {
             return v.X * v.X + v.Y * v.Y;
         }
+        public static double GetLength(this Vec2 v)
+        {
+            return Math.Sqrt(v.GetLengthQuad());
+        }
         public static Vec2 Add(this Vec2 v1, Vec2 v2)
         {
             return v1.Add(v2.X, v2.Y);
@@ -429,6 +454,10 @@ namespace AiCup22
         public static Vec2 Div(this Vec2 v1, double value)
         {
             return new Vec2(v1.X / value, v1.Y / value);
+        }
+        public static double AngleBetweeVec(this Vec2 v1, Vec2 vec2)
+        {
+            return Math.Acos((v1.X * vec2.X + v1.Y * vec2.Y) / (v1.GetLength() * vec2.GetLength()));
         }
     }
 
@@ -456,6 +485,7 @@ namespace AiCup22
         public List<Memory<Loot>> LootMemory = new List<Memory<Loot>>();
         public List<Memory<Unit>> EnemyMemory = new List<Memory<Unit>>();
         public List<Memory<Projectile>> BulletMemory = new List<Memory<Projectile>>();
+        public SpatialHash<Obstacle> SpatialHash = new SpatialHash<Obstacle>(20);
     }
 
     public class Memory<T>
